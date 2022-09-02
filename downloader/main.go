@@ -11,12 +11,16 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"os"
 	"time"
 
 	"gopkg.in/matryer/try.v1"
 )
 
-const NumberOfRetries = 10
+const (
+	NumberOfRetries = 10
+	fileName        = "%s-all-tweets.json"
+)
 
 // CLI needs to be exported
 type CLI struct {
@@ -80,12 +84,46 @@ func (dc *DownloadCommand) Run(cli CLI, env EnvConfig) error {
 
 	log.Infof("found %d tweets", len(out))
 
-	for _, tweet := range out {
+	err := writeTweets(fmt.Sprintf(fileName, cli.Download.User), out)
+	if err != nil {
+		log.WithError(err).Errorf("unable to write tweets")
+
+		return err
+	}
+
+	return nil
+}
+
+func writeTweets(filename string, tweets []twitter.Tweet) error {
+
+	file, err := os.Create(filename)
+	if err != nil {
+		log.WithError(err).Errorf("could not create file %s", filename)
+
+		return err
+	}
+
+	defer func() {
+		err := file.Close()
+		if err != nil {
+			log.WithError(err).Panicf("could not close file %s", filename)
+		}
+	}()
+
+	for _, tweet := range tweets {
 		jsonTweet, err := json.Marshal(tweet)
 		if err != nil {
 			log.WithError(err).Errorf("could not marshal tweet to json %v", tweet)
+
+			return err
 		}
-		fmt.Println(jsonTweet)
+		fmt.Println(string(jsonTweet))
+		_, err = file.WriteString(string(jsonTweet) + "\n")
+		if err != nil {
+			log.WithError(err).Errorf("unable to write tweets to file %s", filename)
+
+			return err
+		}
 	}
 
 	return nil
